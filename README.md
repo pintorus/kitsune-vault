@@ -63,3 +63,7 @@ l'environnement dès leur lecture.
 - **Verrouillez ou fermez KeePassXC** pendant la synchro. KeePassXC recharge le fichier
   modifié, mais des changements non enregistrés dans l'interface pourraient entrer en
   conflit.
+
+## Licence
+
+[MIT](LICENSE)
