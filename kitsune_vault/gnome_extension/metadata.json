@@ -1,0 +1,7 @@
+{
+  "uuid": "kitsune-vault@pintorus.github.com",
+  "name": "kitsune-vault indicator",
+  "description": "Shows the kitsune-vault sync state (running, OK, failed) in the top bar.",
+  "shell-version": ["45", "46", "47", "48"],
+  "url": "https://github.com/pintorus/kitsune-vault"
+}

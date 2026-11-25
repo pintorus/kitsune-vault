@@ -14,6 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .firefox import FirefoxError, FirefoxVault, find_profiles
+from . import status
 from .keepass import KeePassTarget, _title, backup
 
 CONFIG = Path.home() / ".config/kitsune-vault/gui.json"
@@ -218,6 +219,8 @@ class App(tk.Tk):
 
     def _worker(self, profile, db, pw, keyfile, group, dry):
         post = self._events.put
+        mark = (lambda st, msg: None) if dry else status.write  # previews don't touch the indicator
+        mark(status.RUNNING, "Sync in progress")
         try:
             post(("status", "Reading Firefox…"))
             with FirefoxVault(profile, self._ask_firefox_pw) as fx:
@@ -238,14 +241,18 @@ class App(tk.Tk):
             if dry:
                 post(("done", summary + " — preview, nothing written."))
             elif not rows:
+                mark(status.OK, "Already up to date")
                 post(("done", summary + " — already up to date."))
             else:
                 bak = backup(db)
                 target.apply(plan)
+                mark(status.OK, summary)
                 post(("done", summary + f" — database updated (backup {bak.name})."))
         except FirefoxError as e:
+            mark(status.ERROR, f"Firefox: {e}")
             post(("error", f"Firefox: {e}"))
         except Exception as e:
+            mark(status.ERROR, (str(e) or type(e).__name__).splitlines()[0])
             post(("error", str(e) or type(e).__name__))
 
     def _poll(self):

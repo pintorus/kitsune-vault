@@ -20,4 +20,4 @@ build-backend = "setuptools.build_meta"
 packages = ["kitsune_vault"]
 
 [tool.setuptools.package-data]
-kitsune_vault = ["assets/*.png", "assets/*.svg"]
+kitsune_vault = ["assets/*.png", "assets/*.svg", "gnome_extension/*"]

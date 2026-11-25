@@ -84,6 +84,28 @@ summary (no site or user names), and show a desktop notification when something 
 or failed. Unattended mode cannot unlock a Firefox primary password; if you set one,
 scheduled runs fail with a notification.
 
+## Top-bar indicator (GNOME Shell 45+)
+
+A small GNOME Shell extension shows a little fox in the top bar, coloured by sync state:
+
+| Icon | Meaning |
+|---|---|
+| 🦊 blue fox | sync in progress |
+| 🦊 green fox | last sync OK |
+| 🦊 red fox | last sync failed (or a run stopped unexpectedly) |
+
+Its menu shows the time and summary of the last sync, plus **Sync now** (starts the
+systemd service) and **Open kitsune-vault**.
+
+```bash
+.venv/bin/kitsune-vault --install-indicator     # then log out and back in on Wayland
+.venv/bin/kitsune-vault --uninstall-indicator
+```
+
+Every real sync (CLI, GUI or timer) writes `~/.cache/kitsune-vault/status.json`, which
+the extension watches. It holds only the state, a timestamp and the counts, never a
+site name, user name or password. Previews (`--dry-run`) don't change it.
+
 ## Behaviour
 
 - Each entry stores its Firefox ID in the `firefox-guid` attribute, so running the tool

@@ -41,7 +41,20 @@ def main(argv=None) -> int:
     un.add_argument("--uninstall-timer", action="store_true", help="remove the systemd timer")
     un.add_argument("--quiet", action="store_true", help="print the summary only (no entry names)")
     un.add_argument("--notify", action="store_true", help="desktop notification on changes or errors")
+    ind = ap.add_argument_group("top-bar indicator (GNOME Shell 45+)")
+    ind.add_argument("--install-indicator", action="store_true",
+                     help="install and enable the GNOME Shell extension (log out/in on Wayland)")
+    ind.add_argument("--uninstall-indicator", action="store_true", help="remove the extension")
     a = ap.parse_args(argv)
+
+    if a.install_indicator or a.uninstall_indicator:
+        from . import indicator
+        if a.install_indicator:
+            print(indicator.install())
+        else:
+            indicator.uninstall()
+            print("Indicator removed")
+        return 0
 
     profiles = find_profiles()
     if a.list_profiles:
@@ -75,8 +88,15 @@ def main(argv=None) -> int:
               "(logs: journalctl --user -u kitsune-vault)")
         return 0
 
+    from . import status
+    track = not a.dry_run  # only real syncs drive the top-bar indicator
+    if track:
+        status.write(status.RUNNING, "Sync in progress")
+
     def fail(msg: str) -> int:
         print(msg, file=sys.stderr)
+        if track:
+            status.write(status.ERROR, msg)
         if a.notify:
             schedule.notify("kitsune-vault: sync failed", msg, error=True)
         return 1
@@ -126,6 +146,7 @@ def main(argv=None) -> int:
         print("--dry-run: nothing was written")
         return 0
     if not (plan.create or plan.update or plan.trash):
+        status.write(status.OK, "Already up to date")
         return 0
     bak = backup(a.database)
     try:
@@ -133,6 +154,7 @@ def main(argv=None) -> int:
     except Exception as e:
         return fail(f"KeePassXC: write failed ({type(e).__name__}), backup kept: {bak.name}")
     print(f"Database updated (backup: {bak.name})")
+    status.write(status.OK, summary)
     if a.notify:
         schedule.notify("kitsune-vault: passwords synced", summary)
     return 0
