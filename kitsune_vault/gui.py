@@ -6,6 +6,7 @@ remembered in ~/.config/kitsune-vault/gui.json.
 from __future__ import annotations
 
 import json
+import sys
 import queue
 import threading
 import tkinter as tk
@@ -16,6 +17,10 @@ from .firefox import FirefoxError, FirefoxVault, find_profiles
 from .keepass import KeePassTarget, _title, backup
 
 CONFIG = Path.home() / ".config/kitsune-vault/gui.json"
+ICON = Path(__file__).resolve().parent / "assets" / "kitsune-vault.png"
+WM_CLASS = "kitsune-vault"
+AUTO_MINUTES = 15
+DESKTOP_FILE = Path.home() / ".local/share/applications/kitsune-vault.desktop"
 
 
 def _load_cfg() -> dict:
@@ -35,8 +40,13 @@ def _save_cfg(cfg: dict) -> None:
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className=WM_CLASS)  # matches StartupWMClass in the .desktop file
         self.title("kitsune-vault — Firefox → KeePassXC")
+        try:
+            self._icon = tk.PhotoImage(file=str(ICON))
+            self.iconphoto(True, self._icon)
+        except tk.TclError:
+            pass
         self.minsize(640, 480)
         self._events: queue.Queue = queue.Queue()
         self._busy = False
@@ -85,6 +95,9 @@ class App(tk.Tk):
         self.btn_sync = ttk.Button(btns, text="Sync", command=lambda: self._run(dry=False))
         self.btn_preview.pack(side="left")
         self.btn_sync.pack(side="left", padx=6)
+        self.auto = tk.BooleanVar(value=self._timer_active())
+        ttk.Checkbutton(btns, text=f"Auto-sync every {AUTO_MINUTES} min", variable=self.auto,
+                        command=self._toggle_auto).pack(side="left", padx=(12, 0))
         self.progress = ttk.Progressbar(btns, mode="indeterminate", length=120)
         self.progress.pack(side="right")
 
@@ -105,7 +118,60 @@ class App(tk.Tk):
 
         if not self.profiles:
             self.status.set("No Firefox profile found.")
+        # Remember paths as soon as they change, not only when a sync runs.
+        for var in (self.profile, self.db, self.keyfile, self.group):
+            var.trace_add("write", lambda *_: self._remember())
         self.after(100, self._poll)
+
+    def _remember(self):
+        _save_cfg({"profile": self.profile.get(), "database": self.db.get(),
+                   "keyfile": self.keyfile.get(), "group": self.group.get()})
+
+    # ------------------------------------------------------------ auto-sync
+    @staticmethod
+    def _timer_active() -> bool:
+        try:
+            from .schedule import timer_active
+            return timer_active()
+        except Exception:
+            return False
+
+    def _toggle_auto(self):
+        from . import schedule
+        db = Path(self.db.get()).expanduser()
+        keyfile = Path(self.keyfile.get()).expanduser() if self.keyfile.get() else None
+        if not self.auto.get():
+            schedule.uninstall_timer()
+            try:
+                schedule.forget_password(db)
+            except Exception:
+                pass
+            self.status.set("Auto-sync disabled, password removed from the keyring.")
+            return
+        try:
+            if not db.is_file():
+                raise RuntimeError(f"Database not found:\n{db}")
+            pw = self.pw.get() or None
+            if pw is None and keyfile is None:
+                raise RuntimeError("Type the database password first.")
+            try:  # check the credentials before storing them
+                KeePassTarget(db, pw, keyfile, self.group.get() or "Firefox")
+            except Exception as e:
+                raise RuntimeError(f"Cannot open database ({type(e).__name__}).") from None
+            if not messagebox.askyesno(
+                    "Auto-sync",
+                    "Store the database password in the system keyring and sync "
+                    f"every {AUTO_MINUTES} minutes while you are logged in?"):
+                self.auto.set(False)
+                return
+            if pw is not None:
+                schedule.store_password(db, pw)
+            schedule.install_timer(db, AUTO_MINUTES, keyfile, self.group.get() or "Firefox",
+                                   Path(self.profile.get()) if self.profile.get() else None)
+            self.status.set(f"Auto-sync enabled: every {AUTO_MINUTES} min.")
+        except Exception as e:
+            self.auto.set(False)
+            messagebox.showerror("kitsune-vault", str(e) or type(e).__name__)
 
     # ------------------------------------------------------------ file pickers
     def _pick_db(self):
@@ -133,8 +199,6 @@ class App(tk.Tk):
                 "Write to the database?\nA .bak backup will be created first.\n\n"
                 "KeePassXC must be locked or closed."):
             return
-        _save_cfg({"profile": self.profile.get(), "database": str(db),
-                   "keyfile": self.keyfile.get(), "group": self.group.get()})
         self._set_busy(True)
         self.tree.delete(*self.tree.get_children())
         args = (Path(self.profile.get()), db, self.pw.get() or None,
@@ -220,7 +284,32 @@ class App(tk.Tk):
             self.progress.stop()
 
 
+def install_desktop() -> Path:
+    """Add kitsune-vault to the desktop application menu (current user only)."""
+    exe = Path(sys.argv[0]).resolve()
+    DESKTOP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DESKTOP_FILE.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=kitsune-vault\n"
+        "Comment=Sync Firefox passwords into KeePassXC\n"
+        f'Exec="{exe}"\n'
+        f"Icon={ICON}\n"
+        "Terminal=false\n"
+        "Categories=Utility;Security;\n"
+        f"StartupWMClass={WM_CLASS}\n"
+    )
+    return DESKTOP_FILE
+
+
 def main():
+    if "--install-desktop" in sys.argv[1:]:
+        print(f"Launcher installed: {install_desktop()}")
+        return
+    if "--uninstall-desktop" in sys.argv[1:]:
+        DESKTOP_FILE.unlink(missing_ok=True)
+        print("Launcher removed")
+        return
     App().mainloop()
 
 
