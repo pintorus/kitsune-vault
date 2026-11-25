@@ -1,13 +1,16 @@
 [project]
 name = "kitsune-vault"
 version = "0.1.0"
-description = "Synchro à sens unique des mots de passe Firefox vers une base KeePassXC"
+description = "One-way sync of Firefox saved passwords into a KeePassXC database"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["pykeepass>=4.0"]
 
 [project.scripts]
 kitsune-vault = "kitsune_vault.cli:main"
+
+[project.gui-scripts]
+kitsune-vault-gui = "kitsune_vault.gui:main"
 
 [build-system]
 requires = ["setuptools>=61"]

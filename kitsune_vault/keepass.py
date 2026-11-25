@@ -1,4 +1,4 @@
-"""Synchronisation à sens unique Firefox -> KeePassXC (.kdbx) via pykeepass."""
+"""One-way sync Firefox -> KeePassXC (.kdbx) using pykeepass."""
 from __future__ import annotations
 
 import shutil
@@ -19,7 +19,7 @@ CHANGED_KEY = "firefox-time-password-changed"
 class Plan:
     create: list[Login] = field(default_factory=list)
     update: list[Login] = field(default_factory=list)
-    trash: list[str] = field(default_factory=list)   # titres d'entrées
+    trash: list[str] = field(default_factory=list)   # Firefox GUIDs to move to the recycle bin
     unchanged: int = 0
 
 
@@ -28,7 +28,15 @@ def _title(login: Login) -> str:
     return f"{host} ({login.username})" if login.username else host
 
 
+def _same(entry, login: Login) -> bool:
+    # pykeepass returns None for empty fields, Firefox uses "".
+    return ((entry.username or "") == login.username
+            and (entry.password or "") == login.password
+            and (entry.url or "") == login.url)
+
+
 def backup(db_path: Path, keep: int = 5) -> Path:
+    """Copy the database next to itself and keep only the `keep` most recent backups."""
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     dst = db_path.with_name(f"{db_path.name}.kitsune-{stamp}.bak")
     shutil.copy2(db_path, dst)
@@ -63,7 +71,7 @@ class KeePassTarget:
             e = idx.get(lg.guid)
             if e is None:
                 p.create.append(lg)
-            elif (e.password != lg.password or e.username != lg.username or e.url != lg.url):
+            elif not _same(e, lg):
                 p.update.append(lg)
             else:
                 p.unchanged += 1

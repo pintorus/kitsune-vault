@@ -1,7 +1,7 @@
-"""Lecture et déchiffrement des identifiants d'un profil Firefox via NSS.
+"""Read and decrypt the saved logins of a Firefox profile using NSS.
 
-Le profil n'est jamais modifié : on travaille sur une copie temporaire
-(répertoire en 0700, supprimé en fin d'usage) de key4.db / cert9.db / logins.json.
+The profile is never modified: we work on a temporary copy (0700 directory,
+removed afterwards) of key4.db / cert9.db / logins.json.
 """
 from __future__ import annotations
 
@@ -44,10 +44,10 @@ class Login:
     time_password_changed: int  # ms epoch
 
 
-# ---------------------------------------------------------------- profils
+# ---------------------------------------------------------------- profiles
 
 def find_profiles() -> list[Path]:
-    """Renvoie les profils, le profil par défaut en premier."""
+    """Return the profiles, default profile first."""
     found: list[Path] = []
     for root in PROFILE_ROOTS:
         ini = root / "profiles.ini"
@@ -82,10 +82,10 @@ _NSS_DEPS = ("libnspr4.so", "libplc4.so", "libplds4.so", "libnssutil3.so")
 
 
 def _load_nss() -> ctypes.CDLL:
-    """Charge de préférence la NSS livrée avec Firefox (même version que key4.db).
+    """Prefer the NSS bundled with Firefox (same version as key4.db).
 
-    Ses dépendances sont préchargées depuis le même dossier, sinon le linker
-    prend celles du système, souvent plus anciennes.
+    Its dependencies are preloaded from the same directory, otherwise the
+    dynamic linker picks the system ones, which are often older.
     """
     for c in NSS_CANDIDATES + [ctypes.util.find_library("nss3") or "libnss3.so"]:
         d = os.path.dirname(c)
@@ -99,7 +99,7 @@ def _load_nss() -> ctypes.CDLL:
         except OSError:
             continue
     else:
-        raise FirefoxError("libnss3 introuvable (installez libnss3)")
+        raise FirefoxError("libnss3 not found (install libnss3)")
     lib.NSS_Init.argtypes = [ctypes.c_char_p]
     lib.NSS_Init.restype = ctypes.c_int
     lib.NSS_Shutdown.restype = ctypes.c_int
@@ -116,7 +116,7 @@ def _load_nss() -> ctypes.CDLL:
 
 
 class FirefoxVault:
-    """Contexte : `with FirefoxVault(profile, ask_password) as v: v.logins()`."""
+    """Context manager: `with FirefoxVault(profile, ask_password) as v: v.logins()`."""
 
     def __init__(self, profile: Path, ask_password):
         self.profile = Path(profile)
@@ -132,16 +132,16 @@ class FirefoxVault:
             if src.is_file():
                 shutil.copy2(src, self._tmp)
         if not os.path.isfile(os.path.join(self._tmp, "key4.db")):
-            raise FirefoxError(f"key4.db absent dans {self.profile}")
+            raise FirefoxError(f"key4.db not found in {self.profile}")
         self._nss = _load_nss()
         if self._nss.NSS_Init(f"sql:{self._tmp}".encode()) != 0:
-            raise FirefoxError("NSS_Init a échoué")
+            raise FirefoxError("NSS_Init failed")
         slot = self._nss.PK11_GetInternalKeySlot()
         try:
             if self._nss.PK11_NeedLogin(slot):
-                pw = self._ask("Mot de passe principal Firefox : ")
+                pw = self._ask("Firefox primary password: ")
                 if self._nss.PK11_CheckUserPassword(slot, pw.encode()) != 0:
-                    raise FirefoxError("Mot de passe principal Firefox incorrect")
+                    raise FirefoxError("Wrong Firefox primary password")
         finally:
             self._nss.PK11_FreeSlot(slot)
         return self
@@ -158,7 +158,7 @@ class FirefoxVault:
         inp = _SECItem(0, buf, len(raw))
         out = _SECItem(0, None, 0)
         if self._nss.PK11SDR_Decrypt(ctypes.byref(inp), ctypes.byref(out), None) != 0:
-            raise FirefoxError("Échec du déchiffrement d'une entrée")
+            raise FirefoxError("Failed to decrypt an entry")
         try:
             return ctypes.string_at(out.data, out.len).decode("utf-8")
         finally:
@@ -170,7 +170,7 @@ class FirefoxVault:
         out = []
         for e in data.get("logins", []):
             if e.get("deleted") or "encryptedPassword" not in e:
-                continue  # tombstone Firefox Sync : entrée supprimée
+                continue  # Firefox Sync tombstone: deleted entry
             out.append(Login(
                 guid=e["guid"],
                 url=e.get("hostname") or "",

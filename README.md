@@ -1,69 +1,83 @@
 # kitsune-vault 🦊
 
-Synchro **à sens unique** des mots de passe Firefox vers une base **KeePassXC**.
+**One-way** sync of Firefox saved passwords into a **KeePassXC** database.
 
 ```
-Firefox mobile ──(Firefox Sync, E2E)──> Firefox du PC ──(kitsune-vault)──> base.kdbx / groupe "Firefox"
+Firefox mobile ──(Firefox Sync, E2E)──> Firefox on the PC ──(kitsune-vault)──> vault.kdbx / "Firefox" group
 ```
 
-Les mobiles continuent d'utiliser Firefox. Firefox Sync remonte leurs mots de passe
-sur le PC, et kitsune-vault les recopie dans KeePassXC.
+Keep using Firefox on your mobile devices. Firefox Sync brings their passwords to
+your PC, and kitsune-vault copies them into KeePassXC.
 
-## Installation
+## Install
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-## Utilisation
+Linux only for now. The GUI needs Tkinter (`sudo apt install python3-tk` on Debian/Ubuntu).
+
+## Graphical interface
 
 ```bash
-.venv/bin/kitsune-vault ~/Passwords.kdbx --dry-run   # voir ce qui changerait
-.venv/bin/kitsune-vault ~/Passwords.kdbx             # appliquer
+.venv/bin/kitsune-vault-gui
 ```
 
-| Option | Rôle |
+1. Pick the Firefox profile and the `.kdbx` database (plus a key file if you use one).
+2. Type the database password.
+3. **Preview** lists what would be created, updated or trashed, without writing anything.
+4. **Sync** asks for confirmation, makes a backup, then writes.
+
+The GUI remembers the profile, database and key file paths in
+`~/.config/kitsune-vault/gui.json`. It never stores a password.
+
+## Command line
+
+```bash
+.venv/bin/kitsune-vault ~/Passwords.kdbx --dry-run   # show what would change
+.venv/bin/kitsune-vault ~/Passwords.kdbx             # apply
+```
+
+| Option | Purpose |
 |---|---|
-| `--dry-run` | affiche les créations, mises à jour et mises à la corbeille, sans écrire |
-| `--profile DIR` | profil Firefox (sinon détection auto : classique, snap, flatpak) |
-| `--list-profiles` | liste les profils détectés |
-| `--keyfile FILE` | fichier clé KeePassXC |
-| `--no-password` | base protégée par fichier clé seul |
-| `--group NAME` | groupe cible (défaut `Firefox`) |
+| `--dry-run` | show creations, updates and trashed entries without writing |
+| `--profile DIR` | Firefox profile (default: auto-detect: regular, snap, flatpak) |
+| `--list-profiles` | list detected profiles |
+| `--keyfile FILE` | KeePassXC key file |
+| `--no-password` | database protected by a key file only |
+| `--group NAME` | target group (default `Firefox`) |
 
-Les mots de passe sont demandés à l'exécution. Pour une exécution automatisée, on peut
-utiliser `KITSUNE_FIREFOX_PASSWORD` et `KITSUNE_KDBX_PASSWORD`, qui sont retirées de
-l'environnement dès leur lecture.
+Passwords are prompted at runtime. For unattended runs you can set
+`KITSUNE_FIREFOX_PASSWORD` and `KITSUNE_KDBX_PASSWORD`, which are removed from the
+environment as soon as they are read.
 
-## Comportement
+## Behaviour
 
-- Chaque entrée garde l'identifiant Firefox dans l'attribut `firefox-guid`, donc
-  relancer l'outil ne crée pas de doublons.
-- **Nouvelle** entrée : elle est créée. **Modifiée** : elle est mise à jour et l'ancienne
-  version reste dans l'historique KeePass. **Supprimée** dans Firefox : elle part à la
-  corbeille KeePass, jamais de suppression définitive.
-- Seul le groupe `Firefox` est touché.
-- Avant chaque écriture, une sauvegarde `base.kdbx.kitsune-<date>.bak` est créée.
-  Les 5 dernières sont conservées.
+- Each entry stores its Firefox ID in the `firefox-guid` attribute, so running the tool
+  again never creates duplicates.
+- **New** login: created. **Changed**: updated, with the previous version kept in the
+  KeePass history. **Deleted** in Firefox: moved to the KeePass recycle bin, never
+  permanently deleted.
+- Only the `Firefox` group is touched.
+- Before every write, a `vault.kdbx.kitsune-<date>.bak` backup is created. The 5 most
+  recent are kept.
 
-## Sécurité
+## Security
 
-- Le profil Firefox n'est jamais modifié. L'outil lit une copie dans un dossier
-  temporaire en `0700`, supprimé à la fin.
-- Le déchiffrement passe par la **NSS livrée avec Firefox**, même version que `key4.db`.
-- Aucun secret n'est écrit en clair : pas de CSV, pas de log, pas de fichier temporaire
-  déchiffré.
-- Aucun accès réseau.
-- Il est **fortement recommandé** d'activer un mot de passe principal Firefox.
+- The Firefox profile is never modified. The tool reads a copy in a `0700` temporary
+  directory that is removed afterwards.
+- Decryption uses the **NSS library bundled with Firefox**, the same version as `key4.db`.
+- No secret is ever written in clear: no CSV, no log, no decrypted temporary file.
+- No network access.
+- Setting a Firefox primary password is **strongly recommended**.
 
-## Limites
+## Limitations
 
-- Les mots de passe créés dans KeePassXC **ne remontent pas** vers Firefox.
-- **Verrouillez ou fermez KeePassXC** pendant la synchro. KeePassXC recharge le fichier
-  modifié, mais des changements non enregistrés dans l'interface pourraient entrer en
-  conflit.
+- Passwords created in KeePassXC are **not** sent back to Firefox.
+- **Lock or close KeePassXC** while syncing. KeePassXC reloads the modified file, but
+  unsaved changes in its window could conflict.
 
-## Licence
+## License
 
 [MIT](LICENSE)
